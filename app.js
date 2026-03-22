@@ -309,6 +309,12 @@ document.addEventListener('DOMContentLoaded', () => {
             layout.style.display = 'none';
             appContainer.style.display = 'flex';
 
+            // Always download the PDF locally first
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(pdfBlob);
+            link.download = filename;
+            link.click();
+
             // Gather JSON data
             const nfdData = {
                 cliente: document.getElementById('fornecedor').value,
@@ -323,28 +329,27 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.append('pdf_file', pdfBlob, filename);
             formData.append('nfd_data', JSON.stringify(nfdData));
 
-            // Send to Backend
-            const response = await fetch('http://localhost:3000/api/save-nfd', {
-                method: 'POST',
-                body: formData
-            });
-
-            const result = await response.json();
-            if(result.success) {
-                alert('Salvo com sucesso no Banco de Dados! Arquivo PDF armazenado.');
-                // Optionally download locally as well
-                const link = document.createElement('a');
-                link.href = URL.createObjectURL(pdfBlob);
-                link.download = filename;
-                link.click();
-            } else {
-                alert('Erro ao salvar no Banco: ' + result.error);
+            // Send to Backend (relative URL - works on any server)
+            try {
+                const response = await fetch('/api/save-nfd', {
+                    method: 'POST',
+                    body: formData
+                });
+                const result = await response.json();
+                if(result.success) {
+                    alert('✅ PDF baixado e salvo no Banco de Dados com sucesso!');
+                } else {
+                    alert('⚠️ PDF baixado! (Banco de dados indisponível: ' + result.error + ')');
+                }
+            } catch (apiErr) {
+                alert('⚠️ PDF baixado com sucesso! (Banco de dados offline ou não configurado)');
             }
 
         } catch (e) {
             console.error(e);
             alert('Erro ao gerar o PDF.');
             layout.style.display = 'none';
+            appContainer.style.display = 'flex';
         } finally {
             btn.innerHTML = originalText;
             btn.disabled = false;
@@ -364,7 +369,7 @@ document.addEventListener('DOMContentLoaded', () => {
         tbody.innerHTML = '<tr><td colspan="6">Carregando...</td></tr>';
 
         try {
-            const res = await fetch('http://localhost:3000/api/historico');
+            const res = await fetch('/api/historico');
             const data = await res.json();
             
             if (data.length === 0) {
@@ -380,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <td>R$ ${parseFloat(nfd.total).toFixed(2)}</td>
                     <td>${new Date(nfd.criado_em).toLocaleDateString('pt-BR')}</td>
                     <td>
-                        ${nfd.arquivo_pdf ? `<a href="http://localhost:3000/api/pdfs/${nfd.arquivo_pdf}" target="_blank" style="color:#2563eb; text-decoration:underline;">Download/Ver PDF</a>` : '-'}
+                        ${nfd.arquivo_pdf ? `<a href="/api/pdfs/${nfd.arquivo_pdf}" target="_blank" style="color:#2563eb; text-decoration:underline;">Download/Ver PDF</a>` : '-'}
                     </td>
                 </tr>
             `).join('');
