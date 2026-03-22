@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Espelho de NF de Devolução (NFD)</title>
+    <link rel="stylesheet" href="index.css">
+    <!-- PDF.js library for basic text extraction -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+
+<body>
+    <div class="app-container no-print">
+        <header>
+            <h1>Gerador de Espelho NFD</h1>
+            <p>Faça o upload do <b>XML</b> para preenchimento mágico, ou do <b>PDF</b> para preenchimento guiado por
+                referência.</p>
+            <button id="btn-historico" class="btn-secondary" style="margin: 1rem auto 0; font-size:0.9rem;">Ver
+                Histórico (MySQL)</button>
+        </header>
+
+        <!-- Histórico Panel -->
+        <section id="historico-section" class="workspace hidden" style="grid-template-columns: 1fr;">
+            <div class="form-panel">
+                <div class="form-header">
+                    <h3>Registros Salvos no Banco de Dados</h3>
+                    <button id="btn-voltar" class="btn-secondary">Voltar ao Gerador</button>
+                </div>
+                <div class="table-container">
+                    <table id="historico-table" style="width:100%; text-align:left;">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Cliente/Fornecedor</th>
+                                <th>NF Origem</th>
+                                <th>Total R$</th>
+                                <th>Salvo Em</th>
+                                <th>PDF Download</th>
+                            </tr>
+                        </thead>
+                        <tbody id="historico-body">
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+        <section class="upload-section">
+            <div id="drop-zone" class="drop-zone">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                    stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" />
+                </svg>
+                <p>Arraste e solte o arquivo da Nota Fiscal aqui<br><span
+                        style="font-size: 0.9em; color:#64748b;">Suporta PDF ou XML</span></p>
+                <input type="file" id="file-input" accept=".xml, .pdf" hidden>
+            </div>
+        </section>
+
+        <section class="workspace hidden" id="workspace">
+            <!-- Left panel: PDF Preview -->
+            <div class="reference-panel hidden" id="reference-panel">
+                <h3>Documento Original <span style="font-weight:400; font-size: 0.8em; color:#64748b;">(Referência
+                        Visual)</span></h3>
+                <iframe id="pdf-viewer" class="pdf-viewer"></iframe>
+            </div>
+
+            <!-- Right panel: Form -->
+            <div class="form-panel">
+                <div class="form-header">
+                    <h3>Dados do Espelho de Devolução</h3>
+                    <button id="btn-print" class="btn-primary" style="background:#10b981;">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                            <polyline points="7 10 12 15 17 10"></polyline>
+                            <line x1="12" y1="15" x2="12" y2="3"></line>
+                        </svg>
+                        Salvar NFD (PDF + Banco)
+                    </button>
+                </div>
+
+                <div class="form-grid">
+                    <div class="input-group full-width">
+                        <label>Fornecedor / Emitente Origem</label>
+                        <input type="text" id="fornecedor" placeholder="Razão Social / Nome">
+                    </div>
+
+                    <div class="input-group full-width">
+                        <label>Chave de Acesso (NF de Origem)</label>
+                        <input type="text" id="chave-acesso" placeholder="Código de 44 dígitos" maxlength="44">
+                    </div>
+
+                    <div class="input-group">
+                        <label>Número NF Origem</label>
+                        <input type="text" id="numero-nf" placeholder="Apenas Números">
+                    </div>
+
+                    <div class="input-group">
+                        <label>Data de Emissão (Origem)</label>
+                        <input type="date" id="data-emissao">
+                    </div>
+                </div>
+
+                <div class="products-section">
+                    <div class="products-header">
+                        <h4>Itens da Devolução</h4>
+                        <button id="btn-add-product" class="btn-secondary">+ Adicionar Linha</button>
+                    </div>
+
+                    <div class="table-container">
+                        <table id="products-table">
+                            <thead>
+                                <tr>
+                                    <th>Cód. Ori.</th>
+                                    <th>Descrição do Produto</th>
+                                    <th>NCM</th>
+                                    <th>CFOP</th>
+                                    <th>Qtd. Devol.</th>
+                                    <th>Valor Unit.</th>
+                                    <th>Total Bruto</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="products-body">
+                                <!-- Lines generated via JS -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="totals-section">
+                    <div class="total-row">
+                        <span>Total dos Itens:</span>
+                        <span id="total-produtos">R$ 0,00</span>
+                    </div>
+                    <div class="input-group full-width">
+                        <label>Motivo ou Observações Complementares na Nota</label>
+                        <textarea id="obs" rows="2"
+                            placeholder="Ex: Devolução parcial devido a mercadoria não solicitada..."></textarea>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Print / Export Target Layout (DANFE Mockup) -->
+    <div class="print-layout">
+        <div class="watermark">SEM VALOR FISCAL</div>
+
+        <div class="danfe-box">
+            <!-- HEADER -->
+            <div class="danfe-row" style="height: 140px;">
+                <div class="danfe-col center-content" style="width: 45%;">
+                    <h4 style="margin: 0; font-size: 14px; margin-bottom: 10px;">IDENTIFICAÇÃO DO EMITENTE</h4>
+                    <div style="font-weight: bold; font-size: 14px; text-transform: uppercase;" id="val-emitente">-
+                    </div>
+                </div>
+                <div class="danfe-col center-content" style="width: 15%;">
+                    <h2 style="margin: 0; font-size: 20px;">DANFE</h2>
+                    <p style="font-size: 8px; margin: 5px 0 10px 0;">DOCUMENTO AUXILIAR DA NOTA FISCAL ELETRÔNICA</p>
+                    <div style="border: 1px solid black; padding: 5px; width: 90%; text-align: left; font-size: 10px;">
+                        0 - ENTRADA<br>
+                        1 - SAÍDA <strong style="float: right; font-size:14px; margin-top:-10px;">1</strong>
+                    </div>
+                    <p style="margin-top: 10px; font-size: 10px; line-height: 1.3;">Nº <strong id="val-nf"
+                            style="font-size: 11px;">000.000</strong><br>SÉRIE 1<br>FOLHA 1 de 1</p>
+                </div>
+                <div class="danfe-col" style="width: 40%; justify-content: center;">
+                    <p class="danfe-label">CHAVE DE ACESSO</p>
+                    <div style="font-weight: bold; text-align: center; font-size: 11px; margin: 10px 0; letter-spacing: 0px; white-space: nowrap;"
+                        id="val-chave">0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000</div>
+                    <div style="text-align:center; padding-top: 10px;">
+                        <p class="danfe-label" style="text-align:center;">Consulta de autenticidade no portal nacional
+                            da NF-e</p>
+                        <p style="font-size:8px;">www.nfe.fazenda.gov.br/portal ou no site da Sefaz Autorizadora</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- NATUREZA DA OP -->
+            <div class="danfe-row">
+                <div class="danfe-col" style="width: 100%;">
+                    <span class="danfe-label">NATUREZA DA OPERAÇÃO</span>
+                    <div class="danfe-value">ESPELHO DE DEVOLUÇÃO</div>
+                </div>
+            </div>
+
+            <!-- DESTINATARIO -->
+            <div class="danfe-section-title">DESTINATÁRIO / REMETENTE</div>
+            <div class="danfe-row" style="border-top: 1px solid black;">
+                <div class="danfe-col" style="width: 60%;">
+                    <span class="danfe-label">NOME / RAZÃO SOCIAL</span>
+                    <div class="danfe-value">PREENCHIMENTO DE ESPELHO NFD</div>
+                </div>
+                <div class="danfe-col" style="width: 25%;">
+                    <span class="danfe-label">CNPJ/CPF</span>
+                    <div class="danfe-value">-</div>
+                </div>
+                <div class="danfe-col" style="width: 15%;">
+                    <span class="danfe-label">DATA DA EMISSÃO</span>
+                    <div class="danfe-value" id="val-data">12/01/2024</div>
+                </div>
+            </div>
+
+            <!-- PRODUTOS -->
+            <div class="danfe-section-title">DADOS DOS PRODUTOS / SERVIÇOS</div>
+            <div class="danfe-table-container">
+                <table class="danfe-table">
+                    <thead>
+                        <tr>
+                            <th style="width: 8%">CÓD. PROD.</th>
+                            <th style="width: 38%">DESCRIÇÃO DOS PRODUTOS / SERVIÇOS</th>
+                            <th style="width: 8%">NCM/SH</th>
+                            <th style="width: 4%">CST</th>
+                            <th style="width: 5%">CFOP</th>
+                            <th style="width: 4%">UN</th>
+                            <th style="width: 8%">QTDE</th>
+                            <th style="width: 8%">VLR. UNIT.</th>
+                            <th style="width: 9%">VLR. TOTAL</th>
+                            <th style="width: 8%">BC ICMS</th>
+                        </tr>
+                    </thead>
+                    <tbody id="print-products-body">
+                        <!-- Javascript replaces -->
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- CALCULO DO IMPOSTO (TOTAL) -->
+            <div class="danfe-section-title">CÁLCULO DO IMPOSTO (TOTAIS DO ESPELHO)</div>
+            <div class="danfe-row" style="border-top:1px solid black;">
+                <div class="danfe-col" style="width: 80%; height: 35px;">
+                    <span class="danfe-label">BASE DE CÁLCULO DO ICMS</span>
+                    <div class="danfe-value" style="text-align: right;">0,00</div>
+                </div>
+                <div class="danfe-col" style="width: 20%; height: 35px;">
+                    <span class="danfe-label">VALOR TOTAL DOS PRODUTOS</span>
+                    <div class="danfe-value" style="text-align: right; font-weight:bold; font-size:12px;"
+                        id="val-total">R$ 0,00</div>
+                </div>
+            </div>
+
+            <!-- DADOS ADICIONAIS -->
+            <div class="danfe-section-title">DADOS ADICIONAIS</div>
+            <div class="danfe-row" style="height: 100px; border-top:1px solid black;">
+                <div class="danfe-col" style="width: 70%;">
+                    <span class="danfe-label">INFORMAÇÕES COMPLEMENTARES</span>
+                    <div class="danfe-value" style="font-size: 10px; margin-top:5px; font-weight:normal;" id="val-obs">
+                        Sem observações</div>
+                </div>
+                <div class="danfe-col" style="width: 30%;">
+                    <span class="danfe-label">RESERVADO AO FISCO</span>
+                    <div class="danfe-value"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+
+</html>
